@@ -39,12 +39,26 @@ func (s *Service) SubmitReview(ctx context.Context, unit string, req domain.Revi
 
 // Unlock releases transport locks and temporary constraints in the locked
 // sync-group order. It requires every position to have reached the remeasured
-// stage and two distinct qualified reviewers to have passed.
+// stage and two distinct qualified reviewers to have passed. A re-sent unlock
+// (for example after a client disconnect) replays the committed batch rather
+// than appending a second set of events, so the outcome stays idempotent.
 func (s *Service) Unlock(ctx context.Context, unit string, operationID string, logicalTime int64) ([]domain.UnlockEvent, error) {
 	gen, err := s.resolveSnapshotGeneration(ctx, unit)
 	if err != nil {
 		return nil, err
 	}
+	requestDigest := digest(unlockRequest{Unit: unit, OperationID: operationID, LogicalTime: logicalTime})
+
+	// Idempotency replay is resolved before the precondition checks so a
+	// repeated successful unlock replays its committed batch instead of
+	// appending a duplicate set of events.
+	if rec, err := s.store.LookupIdempotency(ctx, unlockScope(unit), operationID); err == nil {
+		if rec.RequestDigest == requestDigest {
+			return s.replayUnlock(ctx, unit, rec.LogicalTime)
+		}
+		return nil, domain.NewBusinessError(domain.CodeIdempotencyConflict, "unlock id reused with different content", operationID, "content mismatch")
+	}
+
 	snap, err := s.store.Snapshot(ctx, unit, gen)
 	if err != nil {
 		return nil, mapErr(err, operationID, "snapshot")
@@ -96,12 +110,49 @@ func (s *Service) Unlock(ctx context.Context, unit string, operationID string, l
 		}); err != nil {
 			return err
 		}
+		if err := store.InsertIdempotencyTx(ctx, tx, domain.IdempotencyRecord{
+			Scope: unlockScope(unit), OperationID: operationID,
+			RequestDigest: requestDigest, ResponseDigest: requestDigest, LogicalTime: logicalTime,
+		}); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, mapErr(err, operationID, "unlock failed")
 	}
 	return events, nil
+}
+
+// replayUnlock returns the previously committed unlock batch for an idempotent
+// re-send. The batch is identified by the logical time recorded in the
+// idempotency record, which is part of the matched request digest.
+func (s *Service) replayUnlock(ctx context.Context, unit string, logicalTime int64) ([]domain.UnlockEvent, error) {
+	all, err := s.store.Unlocks(ctx, unit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.UnlockEvent, 0, len(all))
+	for _, e := range all {
+		if e.LogicalTime == logicalTime {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+// unlockRequest is the idempotency input for an unlock call.
+type unlockRequest struct {
+	Unit        string
+	OperationID string
+	LogicalTime int64
+}
+
+// unlockScope builds the idempotency scope for a unit-level unlock. The
+// colon-delimited form avoids colliding with the unit/position scope keys used
+// by stage operations.
+func unlockScope(unit string) string {
+	return fmt.Sprintf("unlock:%s", unit)
 }
 
 // DecideTerminal competes for the single-writer terminal outcome. Handover
