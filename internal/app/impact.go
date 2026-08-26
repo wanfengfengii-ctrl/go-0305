@@ -30,6 +30,12 @@ func (s *Service) Impact(ctx context.Context, unit, triggerPosition, reason stri
 	if err != nil {
 		return domain.ImpactCase{}, err
 	}
+	// Keep only the latest generation per position. A replacement opens a newer
+	// generation with a new bearing; the superseded generation's bearing is no
+	// longer the active one. Propagating from the current binding prevents the
+	// closure from diffusing along the old bearing's manufacture batch (or grout
+	// lot) after a swap-out.
+	rows = latestRows(rows)
 
 	// Build the propagation indexes.
 	adj := indexAdjacency(snap)
@@ -127,6 +133,24 @@ func indexAdjacency(snap domain.DesignSnapshot) map[string][]string {
 		m[e[1]] = append(m[e[1]], e[0])
 	}
 	return m
+}
+
+// latestRows keeps only the highest-generation row per position. Rows arrive
+// ordered by (position_id, generation), so the last row seen for a position is
+// the current one; older rows belong to superseded replacement generations
+// whose bindings must no longer drive the closure.
+func latestRows(rows []store.StageRow) []store.StageRow {
+	out := make([]store.StageRow, 0, len(rows))
+	by := map[string]int{} // position_id -> index in out
+	for _, r := range rows {
+		if i, ok := by[r.PositionID]; ok {
+			out[i] = r
+		} else {
+			by[r.PositionID] = len(out)
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func findRow(rows []store.StageRow, positionID string) (store.StageRow, bool) {
