@@ -148,6 +148,12 @@ func (s *Service) validateStage(ctx context.Context, pos *domain.DesignPosition,
 			return domain.NewBusinessError(domain.CodeInvalidRequest, "instrument call is not successful", req.OperationID, "instrument_call_id")
 		}
 	}
+	// An inline lease carried by a stage operation must not already be expired
+	// at the operation's logical time, mirroring the standalone AcquireLease
+	// guard. Rejecting before the transaction keeps the position un-advanced.
+	if req.LeaseKind != "" && req.LeaseExpiry <= req.LogicalTime {
+		return domain.NewBusinessError(domain.CodeInvalidRequest, "expiry must be after logical time", req.OperationID, "expiry")
+	}
 	switch req.Stage {
 	case domain.StageIncomingAccepted:
 		if req.ComponentID == "" {
