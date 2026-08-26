@@ -65,12 +65,15 @@ func AdvanceStageTx(ctx context.Context, tx dbtx, unit, positionID string, gener
 }
 
 // InsertPositionStageTx inserts a fresh position-stage row (progress 0) for a
-// new replacement generation inside a transaction.
-func InsertPositionStageTx(ctx context.Context, tx dbtx, unit, positionID string, generation int) error {
+// new replacement generation inside a transaction. It records the component
+// already bound at the position (the new bearing installed by the replacement)
+// so the new generation's stage projection immediately reflects its current
+// bearing, keeping the unit/lineage view consistent with the component balance.
+func InsertPositionStageTx(ctx context.Context, tx dbtx, unit, positionID string, generation int, componentID, destination string) error {
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO position_stages (unit, position_id, generation, current_stage, component_id, destination, grout_lot_id)
-		 VALUES (?, ?, ?, 0, '', '', '')`,
-		unit, positionID, generation)
+		 VALUES (?, ?, ?, 0, ?, ?, '')`,
+		unit, positionID, generation, componentID, destination)
 	return err
 }
 

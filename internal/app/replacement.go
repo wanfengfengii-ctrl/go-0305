@@ -77,7 +77,7 @@ func (s *Service) Replace(ctx context.Context, unit string, req domain.Replaceme
 			}); err != nil {
 				return err
 			}
-			if err := store.InsertPositionStageTx(ctx, tx, unit, p.item.PositionID, p.newGen); err != nil {
+			if err := store.InsertPositionStageTx(ctx, tx, unit, p.item.PositionID, p.newGen, p.item.NewComponentID, ""); err != nil {
 				return err
 			}
 			r := domain.ReplacementGeneration{
