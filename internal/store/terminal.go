@@ -90,14 +90,20 @@ func InsertTerminalTx(ctx context.Context, tx dbtx, t domain.TerminalDecision) e
 	return err
 }
 
+// idempotencyColumns is the shared select/insert column list so the committed
+// generation and component id travel with every record and a replay can return
+// the original committed outcome even after the position advances to a later
+// replacement generation.
+const idempotencyColumns = `scope, operation_id, request_digest, response_digest, event_sequence, logical_time, generation, component_id`
+
 // LookupIdempotency returns an idempotency record for a scope/operation, or
 // ErrNotFound, using a non-transactional read.
 func (s *Store) LookupIdempotency(ctx context.Context, scope, operationID string) (domain.IdempotencyRecord, error) {
 	var r domain.IdempotencyRecord
 	err := s.db.QueryRowContext(ctx,
-		`SELECT scope, operation_id, request_digest, response_digest, event_sequence, logical_time
+		`SELECT `+idempotencyColumns+`
 		 FROM idempotency_records WHERE scope = ? AND operation_id = ?`, scope, operationID).
-		Scan(&r.Scope, &r.OperationID, &r.RequestDigest, &r.ResponseDigest, &r.EventSequence, &r.LogicalTime)
+		Scan(&r.Scope, &r.OperationID, &r.RequestDigest, &r.ResponseDigest, &r.EventSequence, &r.LogicalTime, &r.Generation, &r.ComponentID)
 	if err == sql.ErrNoRows {
 		return r, ErrNotFound
 	}
@@ -109,9 +115,9 @@ func (s *Store) LookupIdempotency(ctx context.Context, scope, operationID string
 func LookupIdempotencyTx(ctx context.Context, tx dbtx, scope, operationID string) (domain.IdempotencyRecord, error) {
 	var r domain.IdempotencyRecord
 	err := tx.QueryRowContext(ctx,
-		`SELECT scope, operation_id, request_digest, response_digest, event_sequence, logical_time
+		`SELECT `+idempotencyColumns+`
 		 FROM idempotency_records WHERE scope = ? AND operation_id = ?`, scope, operationID).
-		Scan(&r.Scope, &r.OperationID, &r.RequestDigest, &r.ResponseDigest, &r.EventSequence, &r.LogicalTime)
+		Scan(&r.Scope, &r.OperationID, &r.RequestDigest, &r.ResponseDigest, &r.EventSequence, &r.LogicalTime, &r.Generation, &r.ComponentID)
 	if err == sql.ErrNoRows {
 		return r, ErrNotFound
 	}
@@ -121,9 +127,9 @@ func LookupIdempotencyTx(ctx context.Context, tx dbtx, scope, operationID string
 // InsertIdempotencyTx records an idempotency record inside a transaction.
 func InsertIdempotencyTx(ctx context.Context, tx dbtx, r domain.IdempotencyRecord) error {
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO idempotency_records (scope, operation_id, request_digest, response_digest, event_sequence, logical_time)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		r.Scope, r.OperationID, r.RequestDigest, r.ResponseDigest, r.EventSequence, r.LogicalTime)
+		`INSERT INTO idempotency_records (`+idempotencyColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.Scope, r.OperationID, r.RequestDigest, r.ResponseDigest, r.EventSequence, r.LogicalTime, r.Generation, r.ComponentID)
 	return err
 }
 

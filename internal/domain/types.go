@@ -264,7 +264,9 @@ type TerminalDecision struct {
 }
 
 // IdempotencyRecord replays a committed response for a repeated operation id,
-// or detects content conflicts.
+// or detects content conflicts. Generation and ComponentID capture the original
+// committed outcome so a replay can return it verbatim even after the position
+// has advanced to a later replacement generation.
 type IdempotencyRecord struct {
 	Scope          string
 	OperationID    string
@@ -272,6 +274,8 @@ type IdempotencyRecord struct {
 	ResponseDigest string
 	EventSequence  int64
 	LogicalTime    int64
+	Generation     int
+	ComponentID    string
 }
 
 // DomainEvent is the append-only audit event envelope.

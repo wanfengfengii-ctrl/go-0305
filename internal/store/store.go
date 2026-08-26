@@ -268,6 +268,8 @@ var schema = []string{
 		response_digest TEXT NOT NULL,
 		event_sequence INTEGER NOT NULL,
 		logical_time INTEGER NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
+		component_id TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (scope, operation_id)
 	)`,
 

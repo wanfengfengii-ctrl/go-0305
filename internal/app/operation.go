@@ -14,6 +14,28 @@ import (
 // rules and, within one transaction, performs component binding, material
 // deduction, lease acquisition and evidence appending.
 func (s *Service) ApplyOperation(ctx context.Context, unit, positionID string, req domain.OperationRequest) (domain.OperationResult, error) {
+	if !req.Stage.Valid() {
+		return domain.OperationResult{}, domain.NewBusinessError(domain.CodeInvalidRequest, "invalid stage", req.OperationID, "stage")
+	}
+	requestDigest := digest(req)
+
+	// Idempotency replay is resolved before the generation and strict prefix
+	// checks. A client may re-submit a previously committed operation id with
+	// a now-stale expected generation after a replacement has advanced the
+	// position; such a safe retry must replay the original committed outcome
+	// verbatim without altering the current generation. Only a content
+	// mismatch (same operation id, different normalized body) is a conflict.
+	if rec, err := s.store.LookupIdempotency(ctx, scopeKey(unit, positionID), req.OperationID); err == nil {
+		if rec.RequestDigest == requestDigest {
+			return domain.OperationResult{
+				OperationID: req.OperationID, Unit: unit, PositionID: positionID,
+				Generation: rec.Generation, Stage: req.Stage, StageName: req.Stage.String(),
+				ComponentID: rec.ComponentID, Replayed: true,
+			}, nil
+		}
+		return domain.OperationResult{}, domain.NewBusinessError(domain.CodeIdempotencyConflict, "operation id reused with different content", req.OperationID, "content mismatch")
+	}
+
 	gen, err := s.resolvePositionGeneration(ctx, unit, positionID, req.ExpectedGeneration)
 	if err != nil {
 		return domain.OperationResult{}, err
@@ -21,24 +43,6 @@ func (s *Service) ApplyOperation(ctx context.Context, unit, positionID string, r
 	row, err := s.store.StageFor(ctx, unit, positionID, gen)
 	if err != nil {
 		return domain.OperationResult{}, mapErr(err, req.OperationID, "position not found")
-	}
-	if !req.Stage.Valid() {
-		return domain.OperationResult{}, domain.NewBusinessError(domain.CodeInvalidRequest, "invalid stage", req.OperationID, "stage")
-	}
-	requestDigest := digest(req)
-
-	// Idempotency replay is resolved before the strict prefix check so a
-	// repeated successful operation replays rather than failing on "stage
-	// already reached".
-	if rec, err := s.store.LookupIdempotency(ctx, scopeKey(unit, positionID), req.OperationID); err == nil {
-		if rec.RequestDigest == requestDigest {
-			return domain.OperationResult{
-				OperationID: req.OperationID, Unit: unit, PositionID: positionID,
-				Generation: gen, Stage: req.Stage, StageName: req.Stage.String(),
-				ComponentID: row.ComponentID, Replayed: true,
-			}, nil
-		}
-		return domain.OperationResult{}, domain.NewBusinessError(domain.CodeIdempotencyConflict, "operation id reused with different content", req.OperationID, "content mismatch")
 	}
 
 	if row.Progress > int(req.Stage) {
@@ -89,6 +93,7 @@ func (s *Service) ApplyOperation(ctx context.Context, unit, positionID string, r
 		if err := store.InsertIdempotencyTx(ctx, tx, domain.IdempotencyRecord{
 			Scope: scopeKey(unit, positionID), OperationID: req.OperationID,
 			RequestDigest: requestDigest, ResponseDigest: requestDigest, LogicalTime: req.LogicalTime,
+			Generation: gen, ComponentID: componentID,
 		}); err != nil {
 			return err
 		}
