@@ -85,6 +85,14 @@ type InstrumentCallRequest struct {
 	LogicalTime int64          `json:"logical_time"`
 }
 
+// RetryInstrumentRequest carries the logical time at which a pending instrument
+// call is retried. The retry is only honoured once the logical time reaches the
+// call's scheduled next_retry_at, so a retry can never succeed before its
+// planned time.
+type RetryInstrumentRequest struct {
+	LogicalTime int64 `json:"logical_time"`
+}
+
 // ImpactRequest registers a nonconformance and derives the deterministic
 // affected-position closure.
 type ImpactRequest struct {

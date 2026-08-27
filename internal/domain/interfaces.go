@@ -44,7 +44,7 @@ type LeaseManager interface {
 // evidence, failed calls and deterministic retry plans (acceptance 5, 6).
 type EvidenceRecorder interface {
 	RecordInstrument(ctx context.Context, req InstrumentCallRequest) (InstrumentCall, error)
-	RetryInstrument(ctx context.Context, callID string) (InstrumentCall, error)
+	RetryInstrument(ctx context.Context, callID string, req RetryInstrumentRequest) (InstrumentCall, error)
 }
 
 // Arbiter computes unique impact closures, establishes replacement generations,

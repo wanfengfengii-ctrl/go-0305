@@ -81,14 +81,19 @@ func (s *Service) RecordInstrument(ctx context.Context, req domain.InstrumentCal
 
 // RetryInstrument re-runs a pending instrument call, incrementing its attempt
 // and advancing its deterministic retry schedule. Only calls in the 'retry'
-// state may be retried.
-func (s *Service) RetryInstrument(ctx context.Context, callID string) (domain.InstrumentCall, error) {
+// state may be retried, and only once the request's logical time has reached
+// the call's scheduled next_retry_at, so a retry can never succeed before its
+// planned time.
+func (s *Service) RetryInstrument(ctx context.Context, callID string, req domain.RetryInstrumentRequest) (domain.InstrumentCall, error) {
 	existing, err := s.store.Call(ctx, callID)
 	if err != nil {
 		return domain.InstrumentCall{}, mapErr(err, "", "call not found")
 	}
 	if existing.Status != "retry" {
 		return domain.InstrumentCall{}, domain.NewBusinessError(domain.CodeInvalidRequest, "call is not retryable", "", "call status")
+	}
+	if req.LogicalTime < existing.NextRetryAt {
+		return domain.InstrumentCall{}, domain.NewBusinessError(domain.CodeInvalidRequest, "retry called before scheduled retry time", "", "logical_time", "next_retry_at")
 	}
 	out := runScript(existing.ScriptStep, existing.Attempt+1)
 	existing.Attempt++

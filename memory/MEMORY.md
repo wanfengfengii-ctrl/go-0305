@@ -1,0 +1,1 @@
+- [Retry logical-time gate](retry-logical-time-gate.md) — retry endpoint now requires logical_time and rejects before next_retry_at

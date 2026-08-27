@@ -110,7 +110,11 @@ func (s *Server) handleInstrumentCall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRetryInstrument(w http.ResponseWriter, r *http.Request) {
-	call, err := s.svc.RetryInstrument(r.Context(), r.PathValue("call"))
+	var req domain.RetryInstrumentRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	call, err := s.svc.RetryInstrument(r.Context(), r.PathValue("call"), req)
 	if err != nil {
 		writeError(w, statusFor(err), err)
 		return
