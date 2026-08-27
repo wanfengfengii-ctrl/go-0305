@@ -1,0 +1,14 @@
+{
+  "name": "hospital-isolation-bearing-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "医院隔震支座安装与临时约束解除质量闭环前端操作台",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs --serve"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

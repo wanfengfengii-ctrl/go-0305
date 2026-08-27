@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>医院隔震支座安装与临时约束解除质量闭环</title>
+  <style>
+    :root { color-scheme: light; --fg:#1a2233; --muted:#667; --accent:#0b5fff; --ok:#0a8f4d; --err:#c0392b; --line:#e5e8f0; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--fg); background:#f6f8fb; }
+    header { background:#0b1f4b; color:#fff; padding:18px 24px; }
+    header h1 { margin:0; font-size:20px; font-weight:600; }
+    header p { margin:6px 0 0; font-size:13px; color:#b9c6e4; }
+    main { max-width:1080px; margin:24px auto; padding:0 24px; display:grid; gap:20px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; }
+    .card h2 { margin:0 0 12px; font-size:15px; }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .pill { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+    .pill.ok { background:#e7f6ee; color:var(--ok); }
+    .pill.err { background:#fdeceb; color:var(--err); }
+    code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }
+    pre { background:#0b1f4b; color:#d7e2fb; padding:14px; border-radius:8px; overflow:auto; }
+    button { border:0; background:var(--accent); color:#fff; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
+    button:hover { filter:brightness(1.08); }
+    .muted { color:var(--muted); font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>医院隔震支座安装与临时约束解除质量闭环</h1>
+    <p>从进场复验、安装取证、异常换装到临时约束解除及隔震层移交的确定性质量闭环</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>后端状态</h2>
+      <div class="row">
+        <span id="backend-status" class="pill err">连接中…</span>
+        <span id="backend-version" class="muted"></span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>锁定隔震单元（设计锁定）</h2>
+      <p class="muted">提交一个最小隔离单元，验证整数微米几何、坐标变换、孔组与界面方向。</p>
+      <div class="row">
+        <button id="btn-lock">提交示例锁定</button>
+        <button id="btn-lock-bad">提交非法几何（应被拒绝）</button>
+      </div>
+      <pre id="lock-result">尚未提交请求。</pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
