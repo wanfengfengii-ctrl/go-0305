@@ -15,9 +15,9 @@ var ErrConflict = errors.New("store: conflict")
 // component id already exists.
 func (s *Store) InsertComponent(ctx context.Context, c domain.PhysicalComponent) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO components (id, kind, model, manufacture_batch, construction_summary, status, current_position, destination, thickness_micron, shim_count)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.ID, string(c.Kind), c.Model, c.ManufactureBatch, c.ConstructionSummary, c.Status, c.CurrentPosition, c.Destination, c.ThicknessMicron, c.ShimCount)
+		`INSERT INTO components (id, kind, model, manufacture_batch, construction_summary, status, current_unit, current_position, destination, thickness_micron, shim_count)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.ID, string(c.Kind), c.Model, c.ManufactureBatch, c.ConstructionSummary, c.Status, c.CurrentUnit, c.CurrentPosition, c.Destination, c.ThicknessMicron, c.ShimCount)
 	return err
 }
 
@@ -26,9 +26,9 @@ func (s *Store) Component(ctx context.Context, id string) (domain.PhysicalCompon
 	var c domain.PhysicalComponent
 	var kind, status string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, model, manufacture_batch, construction_summary, status, current_position, destination, thickness_micron, shim_count
+		`SELECT id, kind, model, manufacture_batch, construction_summary, status, current_unit, current_position, destination, thickness_micron, shim_count
 		 FROM components WHERE id = ?`, id).
-		Scan(&c.ID, &kind, &c.Model, &c.ManufactureBatch, &c.ConstructionSummary, &status, &c.CurrentPosition, &c.Destination, &c.ThicknessMicron, &c.ShimCount)
+		Scan(&c.ID, &kind, &c.Model, &c.ManufactureBatch, &c.ConstructionSummary, &status, &c.CurrentUnit, &c.CurrentPosition, &c.Destination, &c.ThicknessMicron, &c.ShimCount)
 	if err == sql.ErrNoRows {
 		return c, ErrNotFound
 	}
@@ -37,13 +37,17 @@ func (s *Store) Component(ctx context.Context, id string) (domain.PhysicalCompon
 	return c, err
 }
 
-// BindComponentTx binds a component to a position within a transaction,
-// enforcing that the component is free. It returns ErrConflict when the
-// component is already bound elsewhere (or the id does not exist).
-func BindComponentTx(ctx context.Context, tx dbtx, componentID, positionID, status string) error {
+// BindComponentTx binds a component to a unit+position within a transaction,
+// enforcing that the component is free. A component is considered free only
+// when it holds no current unit/position at all; the same position id may
+// legitimately recur in different units, so the unit must qualify the check.
+// It returns ErrConflict when the component is already bound elsewhere (or
+// the id does not exist).
+func BindComponentTx(ctx context.Context, tx dbtx, componentID, unit, positionID, status string) error {
 	res, err := tx.ExecContext(ctx,
-		`UPDATE components SET current_position = ?, status = ? WHERE id = ? AND (current_position = '' OR current_position = ?)`,
-		positionID, status, componentID, positionID)
+		`UPDATE components SET current_unit = ?, current_position = ?, status = ?
+		 WHERE id = ? AND (current_unit = '' OR (current_unit = ? AND current_position = ?))`,
+		unit, positionID, status, componentID, unit, positionID)
 	if err != nil {
 		return err
 	}
@@ -57,10 +61,12 @@ func BindComponentTx(ctx context.Context, tx dbtx, componentID, positionID, stat
 	return nil
 }
 
-// UnbindComponentTx clears a component's current position within a transaction.
+// UnbindComponentTx clears a component's current unit and position within a
+// transaction.
 func UnbindComponentTx(ctx context.Context, tx dbtx, componentID, destination, status string) error {
 	res, err := tx.ExecContext(ctx,
-		`UPDATE components SET current_position = '', destination = ?, status = ? WHERE id = ? AND current_position <> ''`,
+		`UPDATE components SET current_unit = '', current_position = '', destination = ?, status = ?
+		 WHERE id = ? AND current_unit <> ''`,
 		destination, status, componentID)
 	if err != nil {
 		return err
@@ -107,10 +113,10 @@ func (s *Store) Lineage(ctx context.Context, unit string) ([]domain.LineageEvent
 
 // ComponentsByUnit returns all components currently bound within a unit.
 func (s *Store) ComponentsByUnit(ctx context.Context, unit string) ([]domain.ComponentBalance, error) {
-	// Components are not directly tied to a unit; they are located by position.
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT c.id, c.kind, c.destination, c.current_position
-		 FROM components c WHERE c.current_position <> '' ORDER BY c.id`)
+		 FROM components c WHERE c.current_unit = ? AND c.current_position <> '' ORDER BY c.id`,
+		unit)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +129,7 @@ func (s *Store) ComponentsByUnit(ctx context.Context, unit string) ([]domain.Com
 			return nil, err
 		}
 		b.Kind = domain.ComponentKind(kind)
+		b.Unit = unit
 		out = append(out, b)
 	}
 	return out, rows.Err()

@@ -228,7 +228,7 @@ func validateMetrics(pos *domain.DesignPosition, req domain.OperationRequest) er
 func (s *Service) commitStage(ctx context.Context, tx store.DBTx, unit, positionID string, gen int, row store.StageRow, req domain.OperationRequest) (string, string, error) {
 	switch req.Stage {
 	case domain.StageIncomingAccepted:
-		if err := store.BindComponentTx(ctx, tx, req.ComponentID, positionID, "bound"); err != nil {
+		if err := store.BindComponentTx(ctx, tx, req.ComponentID, unit, positionID, "bound"); err != nil {
 			return "", "", mapErr(err, req.OperationID, "component already bound")
 		}
 		if err := store.AppendLineageTx(ctx, tx, domain.LineageEvent{

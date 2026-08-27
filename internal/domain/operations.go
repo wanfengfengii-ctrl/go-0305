@@ -170,6 +170,7 @@ type ComponentBalance struct {
 	ID          string        `json:"id"`
 	Kind        ComponentKind `json:"kind"`
 	Destination string        `json:"destination"`
+	Unit        string        `json:"unit,omitempty"`
 	PositionID  string        `json:"position_id,omitempty"`
 }
 

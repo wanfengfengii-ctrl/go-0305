@@ -133,6 +133,7 @@ var schema = []string{
 		manufacture_batch TEXT NOT NULL,
 		construction_summary TEXT NOT NULL,
 		status TEXT NOT NULL,
+		current_unit TEXT NOT NULL DEFAULT '',
 		current_position TEXT NOT NULL DEFAULT '',
 		destination TEXT NOT NULL DEFAULT '',
 		thickness_micron INTEGER NOT NULL DEFAULT 0,

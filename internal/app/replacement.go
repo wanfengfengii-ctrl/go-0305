@@ -68,7 +68,7 @@ func (s *Service) Replace(ctx context.Context, unit string, req domain.Replaceme
 				return err
 			}
 			// Bind the new bearing and start a fresh projection.
-			if err := store.BindComponentTx(ctx, tx, p.item.NewComponentID, p.item.PositionID, "bound"); err != nil {
+			if err := store.BindComponentTx(ctx, tx, p.item.NewComponentID, unit, p.item.PositionID, "bound"); err != nil {
 				return mapErr(err, req.OperationID, "new bearing bind")
 			}
 			if err := store.AppendLineageTx(ctx, tx, domain.LineageEvent{

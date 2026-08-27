@@ -118,6 +118,7 @@ type PhysicalComponent struct {
 	ManufactureBatch    string
 	ConstructionSummary string
 	Status              string
+	CurrentUnit         string
 	CurrentPosition     string
 	Destination         string
 	ThicknessMicron     int64
