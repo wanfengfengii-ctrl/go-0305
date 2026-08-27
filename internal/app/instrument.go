@@ -81,26 +81,40 @@ func (s *Service) RecordInstrument(ctx context.Context, req domain.InstrumentCal
 
 // RetryInstrument re-runs a pending instrument call, incrementing its attempt
 // and advancing its deterministic retry schedule. Only calls in the 'retry'
-// state may be retried.
+// state may be retried. The read, script evaluation and status advancement are
+// committed in a single transaction so the persisted call always matches the
+// returned result across the retry, evidence-submission and service-restart
+// boundaries.
 func (s *Service) RetryInstrument(ctx context.Context, callID string) (domain.InstrumentCall, error) {
-	existing, err := s.store.Call(ctx, callID)
+	var updated domain.InstrumentCall
+	err := s.store.Tx(ctx, func(tx store.DBTx) error {
+		existing, err := store.CallTx(ctx, tx, callID)
+		if err != nil {
+			return err
+		}
+		if existing.Status != "retry" {
+			return domain.NewBusinessError(domain.CodeInvalidRequest, "call is not retryable", "", "call status")
+		}
+		out := runScript(existing.ScriptStep, existing.Attempt+1)
+		existing.Attempt++
+		existing.Status = out.status
+		existing.FaultCode = out.faultCode
+		existing.RawDigest = digestString(out.reading + out.faultCode)
+		if out.status == "retry" {
+			existing.NextRetryAt = existing.LogicalTime + int64(existing.Attempt)*retryInterval
+		} else {
+			existing.NextRetryAt = 0
+		}
+		if err := store.UpdateCallTx(ctx, tx, existing); err != nil {
+			return err
+		}
+		updated = existing
+		return nil
+	})
 	if err != nil {
 		return domain.InstrumentCall{}, mapErr(err, "", "call not found")
 	}
-	if existing.Status != "retry" {
-		return domain.InstrumentCall{}, domain.NewBusinessError(domain.CodeInvalidRequest, "call is not retryable", "", "call status")
-	}
-	out := runScript(existing.ScriptStep, existing.Attempt+1)
-	existing.Attempt++
-	existing.Status = out.status
-	existing.FaultCode = out.faultCode
-	existing.RawDigest = digestString(out.reading + out.faultCode)
-	if out.status == "retry" {
-		existing.NextRetryAt = existing.LogicalTime + int64(existing.Attempt)*retryInterval
-	} else {
-		existing.NextRetryAt = 0
-	}
-	return existing, nil
+	return updated, nil
 }
 
 // SuccessfulCall reports whether an instrument call id references a successful,

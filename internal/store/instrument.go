@@ -18,9 +18,16 @@ func InsertCallTx(ctx context.Context, tx dbtx, c domain.InstrumentCall) error {
 
 // Call returns an instrument call by id, or ErrNotFound.
 func (s *Store) Call(ctx context.Context, id string) (domain.InstrumentCall, error) {
+	return CallTx(ctx, s.db, id)
+}
+
+// CallTx returns an instrument call by id inside a transaction, or ErrNotFound.
+// Reading inside the transaction guarantees RetryInstrument observes a
+// consistent row and its advancement is committed atomically with the read.
+func CallTx(ctx context.Context, tx dbtx, id string) (domain.InstrumentCall, error) {
 	var c domain.InstrumentCall
 	var instrument, status string
-	err := s.db.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT id, instrument, script_step, logical_time, attempt, status, fault_code, raw_digest, next_retry_at
 		 FROM instrument_calls WHERE id = ?`, id).
 		Scan(&c.ID, &instrument, &c.ScriptStep, &c.LogicalTime, &c.Attempt, &status, &c.FaultCode, &c.RawDigest, &c.NextRetryAt)
